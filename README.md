@@ -3,7 +3,7 @@
 A lightweight, web-based tool to generate 3D covers automatically.  
 
 
-**[Live Demo](https://zuescho.de/cover)**
+**You can find a [live demo over at zuescho.de/cover](https://zuescho.de/cover)**
 
 ![Zueschos Cover Creator Demo](demo.gif)
 
@@ -21,7 +21,7 @@ Instead of hardcoding coordinates (which breaks if you change the template), the
 3.  **Calculate:** It calculates the exact X, Y, Width, and Height of that area.
 4.  **Apply:** When you upload a poster, it automatically scales and crops it to fit exactly inside that detected area, then layers the plastic case overlays on top.
 
-This means if you ever want to change the case shape, you only need to update the images in the `assets` folder—no code changes required!
+This means if you ever want to change the case shape, you only need to update the images in the `assets` folder, no code changes required!
 
 ---
 
@@ -38,5 +38,5 @@ This means if you ever want to change the case shape, you only need to update th
 
 This project is open for personal use. Please respect the licenses of the original assets and inspirations linked above.
 
-```
+
 
