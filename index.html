@@ -10,7 +10,7 @@
     
     <meta property="og:title" content="Zueschos Cover Creator">
     <meta property="og:description" content="Create custom Blu-ray covers easily.">
-    <meta property="og:url" content="https://zuescho.de/cover-creator">
+    <meta property="og:url" content="https://zuescho.de/cover">
     <meta property="og:type" content="website">
 
     <style>
@@ -22,7 +22,6 @@
         h1 { margin: 0; font-size: 1.5rem; letter-spacing: 1px; font-weight: 300; display: flex; align-items: center; gap: 10px; }
         h1 span { font-weight: bold; color: var(--accent); }
         .version-tag { font-size: 0.7rem; background: #333; padding: 2px 6px; border-radius: 4px; color: #888; font-weight: normal; vertical-align: middle; }
-        
         .home-link { color: var(--text); text-decoration: none; font-size: 0.9rem; opacity: 0.7; transition: 0.2s; border: 1px solid #444; padding: 5px 10px; border-radius: 4px; }
         .home-link:hover { opacity: 1; border-color: #777; }
 
@@ -50,28 +49,35 @@
         .status-ok { border-color: #4caf50; color: #a5d6a7; }
         .status-err { border-color: #f44336; color: #ef9a9a; }
         .status-info { border-color: #2979ff; color: #90caf9; }
-
-        /* FOOTER */
+        
+        .toggle-row { display: flex; align-items: center; gap: 10px; background: #252526; padding: 10px; border-radius: 6px; margin-top: 10px; border: 1px solid #333; }
+        .toggle-row input { width: auto; cursor: pointer; transform: scale(1.2); }
+        .toggle-row label { margin: 0; cursor: pointer; color: #fff; }
+        
         footer { margin-top: 40px; padding: 20px; text-align: center; font-size: 0.8rem; color: #666; border-top: 1px solid #333; width: 100%; max-width: 1200px; }
         footer a { color: var(--link); text-decoration: none; transition: 0.2s; }
         footer a:hover { text-decoration: underline; color: #fff; }
-
     </style>
 </head>
 <body>
 
     <header>
-        <h1><span>Zueschos</span> Cover Creator <div class="version-tag">v1.0</div></h1>
+        <h1><span>Zueschos</span> Cover Creator <div class="version-tag">v1.2</div></h1>
         <a href="https://zuescho.de" class="home-link">← Back to zuescho.de</a>
     </header>
 
     <div class="main-ui">
         <div class="panel">
             <h2>1. Upload Poster</h2>
-            <p>Simply upload your movie poster. The app uses the <code>mask.png</code> on the server to apply the correct shape automatically.</p>
+            <p>Upload a high-res poster. The app will smart-resize it to fit the <code>mask.png</code> shape.</p>
             
             <label style="margin-top: 15px;">Select Image File</label>
             <input type="file" id="posterInput" accept="image/*">
+            
+            <div class="toggle-row">
+                <input type="checkbox" id="hiresCheck" onchange="render()">
+                <label for="hiresCheck">High Res Output (1024px)</label>
+            </div>
             
             <div id="statusArea" class="status-box status-info" style="margin-top: 15px;">
                 Initializing system...
@@ -93,15 +99,9 @@
     </div>
 
     <footer>
-        <p>
-            Created by <b>Zuescho</b> with the help of <b>Gemini AI</b>.
-        </p>
-        <p>
-            Inspired by <a href="https://github.com/omegas82128/Aikino" target="_blank">Aikino</a>.
-        </p>
-        <p>
-            Blu-ray Case Template by <a href="https://www.deviantart.com/920r9/art/DVD-Plastic-Case-for-GIMP-106113654" target="_blank">920r9 (DeviantArt)</a>.
-        </p>
+        <p>Created by <b>Zuescho</b> with the help of <b>Gemini AI</b>.</p>
+        <p>Blu-ray Case Template by <a href="https://www.deviantart.com/920r9/art/DVD-Plastic-Case-for-GIMP-106113654" target="_blank">920r9 (DeviantArt)</a>.</p>
+        <p>Inspired by <a href="https://github.com/omegas82128/Aikino" target="_blank">Aikino</a>.</p>
     </footer>
 
     <script>
@@ -109,6 +109,7 @@
         const ctx = canvas.getContext('2d');
         const statusEl = document.getElementById('statusArea');
         const debugEl = document.getElementById('debugInfo');
+        const hiresCheck = document.getElementById('hiresCheck');
 
         // STATE
         const ASSETS = {
@@ -119,7 +120,7 @@
             'lights': { src: 'assets/lights.png', img: null }
         };
 
-        // This will hold the "Blue Area" coordinates found inside mask.png
+        // Standard 512px Zone
         let MASK_ZONE = { x: 0, y: 0, w: 512, h: 512, valid: false };
         let currentPoster = null;
 
@@ -128,18 +129,15 @@
             log("Loading server assets...", "status-info");
             
             try {
-                // Load all images in parallel
                 const promises = Object.keys(ASSETS).map(key => loadAsset(ASSETS[key].src).then(img => ASSETS[key].img = img));
                 await Promise.all(promises);
                 
-                // ANALYZE THE MASK
                 if (ASSETS.mask.img) {
                     analyzeMask(ASSETS.mask.img);
                 } else {
                     log("Error: 'assets/mask.png' missing.", "status-err");
                 }
                 
-                // Initial Draw
                 render();
 
             } catch (e) {
@@ -147,30 +145,23 @@
                 log("Error loading assets.", "status-err");
             }
             
-            // Poster Listener
             document.getElementById('posterInput').addEventListener('change', handlePosterUpload);
         });
 
-        // --- 2. THE MAGIC: SCANNING THE MASK ---
+        // --- 2. ANALYZE MASK (Base 512px) ---
         function analyzeMask(img) {
-            // Create a temporary canvas to read pixels
             const tempC = document.createElement('canvas');
             tempC.width = 512;
             tempC.height = 512;
             const tCtx = tempC.getContext('2d');
             tCtx.drawImage(img, 0, 0);
             
-            // Get pixel data
             const p = tCtx.getImageData(0, 0, 512, 512).data;
-            
-            let minX = 512, minY = 512, maxX = 0, maxY = 0;
-            let found = false;
+            let minX = 512, minY = 512, maxX = 0, maxY = 0, found = false;
 
-            // Loop through every pixel
             for (let y = 0; y < 512; y++) {
                 for (let x = 0; x < 512; x++) {
-                    const alpha = p[(y * 512 + x) * 4 + 3];
-                    if (alpha > 20) { // If pixel is not transparent
+                    if (p[(y * 512 + x) * 4 + 3] > 20) {
                         if (x < minX) minX = x;
                         if (x > maxX) maxX = x;
                         if (y < minY) minY = y;
@@ -181,58 +172,106 @@
             }
 
             if (found) {
-                MASK_ZONE = {
-                    x: minX,
-                    y: minY,
-                    w: maxX - minX,
-                    h: maxY - minY,
-                    valid: true
-                };
+                MASK_ZONE = { x: minX, y: minY, w: maxX - minX, h: maxY - minY, valid: true };
                 log("Ready! Upload a poster.", "status-ok");
-                debugEl.innerHTML = `Mask Area: X:${MASK_ZONE.x} Y:${MASK_ZONE.y} (${MASK_ZONE.w}x${MASK_ZONE.h})`;
+                debugEl.innerHTML = `Mask Area: ${MASK_ZONE.w}x${MASK_ZONE.h}`;
             } else {
                 log("Error: mask.png is empty!", "status-err");
             }
         }
 
-        // --- 3. RENDERING ---
+        // --- 3. SMART STEPPED RESIZING ---
+        // This prevents aliasing/pixelation when shrinking large images
+        function smartResize(img, targetW, targetH) {
+            // If the image is not huge, just return it
+            if (img.width < targetW * 2) return img;
+
+            // Step 1: Halve the image until it's close to target size
+            let curCanvas = document.createElement('canvas');
+            curCanvas.width = img.width;
+            curCanvas.height = img.height;
+            let curCtx = curCanvas.getContext('2d');
+            curCtx.drawImage(img, 0, 0);
+
+            let curW = img.width;
+            let curH = img.height;
+
+            while (curW / 2 >= targetW) {
+                let newW = Math.floor(curW / 2);
+                let newH = Math.floor(curH / 2);
+                
+                let tempCanvas = document.createElement('canvas');
+                tempCanvas.width = newW;
+                tempCanvas.height = newH;
+                let tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(curCanvas, 0, 0, newW, newH);
+                
+                curCanvas = tempCanvas;
+                curW = newW;
+                curH = newH;
+            }
+
+            return curCanvas;
+        }
+
+        // --- 4. RENDER LOOP ---
         function render() {
-            ctx.clearRect(0, 0, 512, 512);
+            // Determine Scale Factor (1x or 2x)
+            const scale = hiresCheck.checked ? 2 : 1;
+            const size = 512 * scale;
+
+            canvas.width = size;
+            canvas.height = size;
+
+            ctx.clearRect(0, 0, size, size);
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
-            // -- A. DRAW MASK LAYER --
+            // SCALED MASK ZONE
+            const zone = {
+                x: MASK_ZONE.x * scale,
+                y: MASK_ZONE.y * scale,
+                w: MASK_ZONE.w * scale,
+                h: MASK_ZONE.h * scale
+            };
+
+            // A. DRAW MASK
             if (ASSETS.mask.img) {
-                ctx.drawImage(ASSETS.mask.img, 0, 0);
-                // "source-in" = Keep only pixels that overlap with the mask
+                ctx.drawImage(ASSETS.mask.img, 0, 0, size, size);
                 ctx.globalCompositeOperation = 'source-in';
             }
 
-            // -- B. DRAW POSTER (Auto-Fitted) --
+            // B. DRAW POSTER
             if (currentPoster && MASK_ZONE.valid) {
-                const drawRect = calculateFit(currentPoster, MASK_ZONE);
-                ctx.drawImage(currentPoster, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+                const fit = calculateFit(currentPoster, zone);
+                
+                // Use Smart Resize to get a clean downscaled version
+                const cleanPoster = smartResize(currentPoster, fit.w, fit.h);
+                
+                ctx.drawImage(cleanPoster, fit.x, fit.y, fit.w, fit.h);
             } else if (!currentPoster) {
-                // Background color if no poster
                 ctx.fillStyle = "#222";
-                ctx.fillRect(0, 0, 512, 512);
+                ctx.fillRect(0, 0, size, size);
             }
 
-            // -- C. DRAW OVERLAYS --
+            // C. DRAW OVERLAYS
             ctx.globalCompositeOperation = 'source-over';
             
-            if (ASSETS.case.img)   ctx.drawImage(ASSETS.case.img, 0, 0);
-            if (ASSETS.shadow.img) ctx.drawImage(ASSETS.shadow.img, 0, 0);
-            if (ASSETS.clips.img)  ctx.drawImage(ASSETS.clips.img, 0, 0);
-            if (ASSETS.lights.img) ctx.drawImage(ASSETS.lights.img, 0, 0);
+            const drawOverlay = (img) => { if (img) ctx.drawImage(img, 0, 0, size, size); };
+            
+            drawOverlay(ASSETS.case.img);
+            drawOverlay(ASSETS.shadow.img);
+            drawOverlay(ASSETS.clips.img);
+            drawOverlay(ASSETS.lights.img);
+            
+            // Update Debug
+            if (scale === 2) debugEl.innerHTML = `Mode: High-Res (1024px)`;
+            else debugEl.innerHTML = `Mode: Standard (512px)`;
         }
 
-        // --- 4. UTILITIES ---
         function calculateFit(img, zone) {
-            // "Cover" logic: Scale image to fill the zone completely
             const imgRatio = img.naturalWidth / img.naturalHeight;
             const zoneRatio = zone.w / zone.h;
-            
             let newW, newH;
 
             if (imgRatio > zoneRatio) {
@@ -243,7 +282,6 @@
                 newH = newW / imgRatio;
             }
             
-            // Center it
             const newX = zone.x - (newW - zone.w) / 2;
             const newY = zone.y - (newH - zone.h) / 2;
 
@@ -257,7 +295,7 @@
                     const img = new Image();
                     img.onload = () => {
                         currentPoster = img;
-                        log("Poster applied successfully.", "status-ok");
+                        log("Poster loaded. Rendering...", "status-ok");
                         render();
                     };
                     img.src = evt.target.result;
