@@ -5,11 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <title>Zueschos Cover Creator</title>
-    <meta name="description" content="Create custom Blu-ray covers easily. Upload your poster and get a perfect 3D case render.">
+    <meta name="description" content="Create custom Blu-ray covers easily.">
     <meta name="author" content="Zuescho">
     
     <meta property="og:title" content="Zueschos Cover Creator">
-    <meta property="og:description" content="Create custom Blu-ray covers easily.">
     <meta property="og:url" content="https://zuescho.de/cover">
     <meta property="og:type" content="website">
 
@@ -17,7 +16,6 @@
         :root { --bg: #121212; --panel: #1e1e1e; --accent: #c2185b; --text: #e0e0e0; --link: #ff4081; }
         body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; }
         
-        /* HEADER */
         header { width: 100%; max-width: 1200px; padding: 20px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
         h1 { margin: 0; font-size: 1.5rem; letter-spacing: 1px; font-weight: 300; display: flex; align-items: center; gap: 10px; }
         h1 span { font-weight: bold; color: var(--accent); }
@@ -25,7 +23,6 @@
         .home-link { color: var(--text); text-decoration: none; font-size: 0.9rem; opacity: 0.7; transition: 0.2s; border: 1px solid #444; padding: 5px 10px; border-radius: 4px; }
         .home-link:hover { opacity: 1; border-color: #777; }
 
-        /* MAIN LAYOUT */
         .main-ui { display: flex; flex-wrap: wrap; gap: 30px; max-width: 1200px; width: 100%; justify-content: center; padding: 20px; flex-grow: 1; }
         .panel { background: var(--panel); padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 320px; display: flex; flex-direction: column; gap: 15px; height: fit-content; }
         
@@ -50,7 +47,7 @@
         .status-err { border-color: #f44336; color: #ef9a9a; }
         .status-info { border-color: #2979ff; color: #90caf9; }
         
-        .toggle-row { display: flex; align-items: center; gap: 10px; background: #252526; padding: 10px; border-radius: 6px; margin-top: 10px; border: 1px solid #333; }
+        .toggle-row { display: flex; align-items: center; gap: 10px; background: #252526; padding: 10px; border-radius: 6px; margin-top: 5px; border: 1px solid #333; }
         .toggle-row input { width: auto; cursor: pointer; transform: scale(1.2); }
         .toggle-row label { margin: 0; cursor: pointer; color: #fff; }
         
@@ -62,30 +59,32 @@
 <body>
 
     <header>
-        <h1><span>Zueschos</span> Cover Creator <div class="version-tag">v1.2</div></h1>
+        <h1><span>Zueschos</span> Cover Creator <div class="version-tag">v1.3</div></h1>
         <a href="https://zuescho.de" class="home-link">← Back to zuescho.de</a>
     </header>
 
     <div class="main-ui">
         <div class="panel">
             <h2>1. Upload Poster</h2>
-            <p>Upload a high-res poster. The app will smart-resize it to fit the <code>mask.png</code> shape.</p>
+            <p>Select your image. The app automatically masks, resizes, and sharpens it.</p>
             
             <label style="margin-top: 15px;">Select Image File</label>
             <input type="file" id="posterInput" accept="image/*">
             
-            <div class="toggle-row">
-                <input type="checkbox" id="hiresCheck" onchange="render()">
-                <label for="hiresCheck">High Res Output (1024px)</label>
+            <div style="margin-top: 15px;">
+                <label>Quality Settings</label>
+                <div class="toggle-row">
+                    <input type="checkbox" id="hiresCheck" onchange="render()">
+                    <label for="hiresCheck">High Res (1024px)</label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="sharpenCheck" checked onchange="render()">
+                    <label for="sharpenCheck">Auto-Sharpen (Crisp Edges)</label>
+                </div>
             </div>
             
             <div id="statusArea" class="status-box status-info" style="margin-top: 15px;">
                 Initializing system...
-            </div>
-            
-            <div style="margin-top: auto;">
-                <label>System Info</label>
-                <div id="debugInfo" style="font-size: 0.8em; color: #555;">Waiting for assets...</div>
             </div>
         </div>
 
@@ -108,8 +107,8 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const statusEl = document.getElementById('statusArea');
-        const debugEl = document.getElementById('debugInfo');
         const hiresCheck = document.getElementById('hiresCheck');
+        const sharpenCheck = document.getElementById('sharpenCheck');
 
         // STATE
         const ASSETS = {
@@ -120,119 +119,139 @@
             'lights': { src: 'assets/lights.png', img: null }
         };
 
-        // Standard 512px Zone
         let MASK_ZONE = { x: 0, y: 0, w: 512, h: 512, valid: false };
         let currentPoster = null;
 
         // --- 1. INITIALIZATION ---
         window.addEventListener('DOMContentLoaded', async () => {
             log("Loading server assets...", "status-info");
-            
             try {
                 const promises = Object.keys(ASSETS).map(key => loadAsset(ASSETS[key].src).then(img => ASSETS[key].img = img));
                 await Promise.all(promises);
                 
-                if (ASSETS.mask.img) {
-                    analyzeMask(ASSETS.mask.img);
-                } else {
-                    log("Error: 'assets/mask.png' missing.", "status-err");
-                }
+                if (ASSETS.mask.img) analyzeMask(ASSETS.mask.img);
+                else log("Error: 'assets/mask.png' missing.", "status-err");
                 
                 render();
-
             } catch (e) {
                 console.error(e);
                 log("Error loading assets.", "status-err");
             }
-            
             document.getElementById('posterInput').addEventListener('change', handlePosterUpload);
         });
 
-        // --- 2. ANALYZE MASK (Base 512px) ---
+        // --- 2. ANALYZE MASK ---
         function analyzeMask(img) {
             const tempC = document.createElement('canvas');
             tempC.width = 512;
             tempC.height = 512;
             const tCtx = tempC.getContext('2d');
             tCtx.drawImage(img, 0, 0);
-            
             const p = tCtx.getImageData(0, 0, 512, 512).data;
             let minX = 512, minY = 512, maxX = 0, maxY = 0, found = false;
 
             for (let y = 0; y < 512; y++) {
                 for (let x = 0; x < 512; x++) {
                     if (p[(y * 512 + x) * 4 + 3] > 20) {
-                        if (x < minX) minX = x;
-                        if (x > maxX) maxX = x;
-                        if (y < minY) minY = y;
-                        if (y > maxY) maxY = y;
+                        if (x < minX) minX = x; if (x > maxX) maxX = x;
+                        if (y < minY) minY = y; if (y > maxY) maxY = y;
                         found = true;
                     }
                 }
             }
-
             if (found) {
                 MASK_ZONE = { x: minX, y: minY, w: maxX - minX, h: maxY - minY, valid: true };
                 log("Ready! Upload a poster.", "status-ok");
-                debugEl.innerHTML = `Mask Area: ${MASK_ZONE.w}x${MASK_ZONE.h}`;
             } else {
                 log("Error: mask.png is empty!", "status-err");
             }
         }
 
-        // --- 3. SMART STEPPED RESIZING ---
-        // This prevents aliasing/pixelation when shrinking large images
+        // --- 3. SMART RESIZE (Stepped) ---
         function smartResize(img, targetW, targetH) {
-            // If the image is not huge, just return it
+            // If image is small enough, stick to basic resize
             if (img.width < targetW * 2) return img;
 
-            // Step 1: Halve the image until it's close to target size
+            // Step down by half until close to target
             let curCanvas = document.createElement('canvas');
             curCanvas.width = img.width;
             curCanvas.height = img.height;
             let curCtx = curCanvas.getContext('2d');
             curCtx.drawImage(img, 0, 0);
 
-            let curW = img.width;
-            let curH = img.height;
-
+            let curW = img.width, curH = img.height;
             while (curW / 2 >= targetW) {
                 let newW = Math.floor(curW / 2);
                 let newH = Math.floor(curH / 2);
-                
                 let tempCanvas = document.createElement('canvas');
-                tempCanvas.width = newW;
-                tempCanvas.height = newH;
+                tempCanvas.width = newW; tempCanvas.height = newH;
                 let tempCtx = tempCanvas.getContext('2d');
                 tempCtx.drawImage(curCanvas, 0, 0, newW, newH);
-                
                 curCanvas = tempCanvas;
-                curW = newW;
-                curH = newH;
+                curW = newW; curH = newH;
             }
-
             return curCanvas;
         }
 
-        // --- 4. RENDER LOOP ---
+        // --- 4. SHARPEN FILTER ---
+        function applySharpen(ctx, w, h, amount) {
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const data = imageData.data;
+            const width = imageData.width;
+            const mix = amount || 0.05; // Strength
+
+            // Very simple kernel [0, -1, 0, -1, 5, -1, 0, -1, 0]
+            // We implement a weighted mix to prevent artifacts
+            const output = new Uint8ClampedArray(data);
+            
+            for (let y = 1; y < h - 1; y++) {
+                for (let x = 1; x < w - 1; x++) {
+                    const i = (y * width + x) * 4;
+                    
+                    // Simple cross kernel
+                    const center = data[i];
+                    const up = data[i - width * 4];
+                    const down = data[i + width * 4];
+                    const left = data[i - 4];
+                    const right = data[i + 4];
+                    
+                    // Sharpen formula: Center + (Center - AverageNeighbors) * strength
+                    // Optimized to: 5*Center - Up - Down - Left - Right ... mixed
+                    
+                    // Apply to RGB
+                    for (let c = 0; c < 3; c++) {
+                        const val = data[i + c];
+                        const neighbors = data[i - width * 4 + c] + data[i + width * 4 + c] + data[i - 4 + c] + data[i + 4 + c];
+                        const sharp = val * 5 - neighbors;
+                        
+                        // Blend original with sharp
+                        output[i + c] = val + (sharp - val) * mix;
+                    }
+                    output[i+3] = data[i+3]; // Keep Alpha
+                }
+            }
+            
+            // Write back
+            const finalData = new ImageData(output, w, h);
+            ctx.putImageData(finalData, 0, 0);
+        }
+
+        // --- 5. RENDER ---
         function render() {
-            // Determine Scale Factor (1x or 2x)
             const scale = hiresCheck.checked ? 2 : 1;
             const size = 512 * scale;
-
+            
             canvas.width = size;
             canvas.height = size;
-
+            
             ctx.clearRect(0, 0, size, size);
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
-            // SCALED MASK ZONE
+            // SCALED ZONES
             const zone = {
-                x: MASK_ZONE.x * scale,
-                y: MASK_ZONE.y * scale,
-                w: MASK_ZONE.w * scale,
-                h: MASK_ZONE.h * scale
+                x: MASK_ZONE.x * scale, y: MASK_ZONE.y * scale,
+                w: MASK_ZONE.w * scale, h: MASK_ZONE.h * scale
             };
 
             // A. DRAW MASK
@@ -245,28 +264,32 @@
             if (currentPoster && MASK_ZONE.valid) {
                 const fit = calculateFit(currentPoster, zone);
                 
-                // Use Smart Resize to get a clean downscaled version
+                // 1. Resize nicely
                 const cleanPoster = smartResize(currentPoster, fit.w, fit.h);
                 
+                // 2. Draw to main canvas
                 ctx.drawImage(cleanPoster, fit.x, fit.y, fit.w, fit.h);
+                
+                // 3. Apply Sharpen (if enabled)
+                // We only sharpen the poster area to avoid messing up the transparent mask edges
+                if (sharpenCheck.checked) {
+                    // It's tricky to sharpen only the poster without affecting the mask alpha.
+                    // So we sharpen the whole canvas *while inside source-in mode* (affecting only the opaque parts aka poster)
+                    // Actually, 'source-in' is active. We are drawing on the mask.
+                    applySharpen(ctx, size, size, 0.4); 
+                }
             } else if (!currentPoster) {
-                ctx.fillStyle = "#222";
-                ctx.fillRect(0, 0, size, size);
+                ctx.fillStyle = "#222"; ctx.fillRect(0, 0, size, size);
             }
 
-            // C. DRAW OVERLAYS
+            // C. OVERLAYS
             ctx.globalCompositeOperation = 'source-over';
-            
             const drawOverlay = (img) => { if (img) ctx.drawImage(img, 0, 0, size, size); };
             
             drawOverlay(ASSETS.case.img);
             drawOverlay(ASSETS.shadow.img);
             drawOverlay(ASSETS.clips.img);
             drawOverlay(ASSETS.lights.img);
-            
-            // Update Debug
-            if (scale === 2) debugEl.innerHTML = `Mode: High-Res (1024px)`;
-            else debugEl.innerHTML = `Mode: Standard (512px)`;
         }
 
         function calculateFit(img, zone) {
@@ -275,11 +298,9 @@
             let newW, newH;
 
             if (imgRatio > zoneRatio) {
-                newH = zone.h;
-                newW = newH * imgRatio;
+                newH = zone.h; newW = newH * imgRatio;
             } else {
-                newW = zone.w;
-                newH = newW / imgRatio;
+                newW = zone.w; newH = newW / imgRatio;
             }
             
             const newX = zone.x - (newW - zone.w) / 2;
